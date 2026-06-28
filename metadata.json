@@ -1,0 +1,6 @@
+{
+  "name": "Crypto Auto Publisher",
+  "description": "Modern cross-platform desktop suite for automated crypto market data collection, AI article generation, trading chart rendering, and Blurt.blog publishing.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
