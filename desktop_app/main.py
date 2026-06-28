@@ -5,6 +5,7 @@ Runs on Windows, Linux, macOS.
 """
 import sys
 import os
+from datetime import datetime
 from PySide6.QtWidgets import (
     QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
     QPushButton, QLabel, QStackedWidget, QTextEdit, QLineEdit,
@@ -222,14 +223,22 @@ class CryptoPublisherDesktop(QMainWindow):
         pause_sch_btn = QPushButton("⏸️ Pause Scheduler")
         pause_sch_btn.clicked.connect(self.scheduler.stop)
 
+        reset_sch_btn = QPushButton("🔄 Reset Countdown Timer")
+        reset_sch_btn.clicked.connect(self._reset_scheduler_timer)
+
         btn_bar.addWidget(run_now_btn)
         btn_bar.addWidget(start_sch_btn)
         btn_bar.addWidget(pause_sch_btn)
+        btn_bar.addWidget(reset_sch_btn)
         btn_bar.addStretch()
         
         layout.addWidget(logs_group)
         layout.addLayout(btn_bar)
         self.stack.addWidget(page)
+
+    def _reset_scheduler_timer(self):
+        self.scheduler.reset_timer()
+        QMessageBox.information(self, "Scheduler Reset", "The countdown timer has been reset to 12 hours.")
 
     def _create_stat_card(self, title, value, subtitle, is_lbl=False):
         card = QWidget()
@@ -295,14 +304,117 @@ class CryptoPublisherDesktop(QMainWindow):
         page = QWidget()
         layout = QVBoxLayout(page)
         layout.setContentsMargins(25, 25, 25, 25)
-        layout.addWidget(QLabel("🤖 AI Providers (Google Gemini, OpenAI, Grok)"))
+        layout.setSpacing(15)
+        
+        header = QLabel("🤖 AI Providers (Google Gemini, OpenAI, Grok)")
+        header.setStyleSheet("font-size: 18px; font-weight: bold; color: #FFFFFF;")
+        layout.addWidget(header)
+        
         # Table of providers
         self.ai_table = QTableWidget(3, 5)
         self.ai_table.setHorizontalHeaderLabels(["Provider", "API Key", "Model", "Temperature", "Status"])
         self.ai_table.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
         layout.addWidget(self.ai_table)
+        
+        # Form
+        form_group = QGroupBox("Edit Selected AI Provider Settings")
+        form_layout = QVBoxLayout(form_group)
+        
+        self.edit_ai_name_lbl = QLabel("Select an AI provider from the table above to edit...")
+        self.edit_ai_name_lbl.setStyleSheet("font-weight: bold; color: #3B82F6; font-size: 14px;")
+        form_layout.addWidget(self.edit_ai_name_lbl)
+        
+        grid = QHBoxLayout()
+        
+        key_v = QVBoxLayout()
+        key_v.addWidget(QLabel("API Key:"))
+        self.edit_ai_key = QLineEdit()
+        self.edit_ai_key.setPlaceholderText("Enter API Key...")
+        self.edit_ai_key.setEchoMode(QLineEdit.Password)
+        key_v.addWidget(self.edit_ai_key)
+        grid.addLayout(key_v)
+        
+        model_v = QVBoxLayout()
+        model_v.addWidget(QLabel("Model ID/Alias:"))
+        self.edit_ai_model = QLineEdit()
+        self.edit_ai_model.setPlaceholderText("e.g. gemini-3.5-flash")
+        model_v.addWidget(self.edit_ai_model)
+        grid.addLayout(model_v)
+        
+        temp_v = QVBoxLayout()
+        temp_v.addWidget(QLabel("Temperature:"))
+        self.edit_ai_temp = QDoubleSpinBox()
+        self.edit_ai_temp.setRange(0.0, 2.0)
+        self.edit_ai_temp.setSingleStep(0.1)
+        self.edit_ai_temp.setValue(0.7)
+        temp_v.addWidget(self.edit_ai_temp)
+        grid.addLayout(temp_v)
+        
+        form_layout.addLayout(grid)
+        
+        btn_layout = QHBoxLayout()
+        self.edit_ai_default = QCheckBox("Set as Default/Active AI Engine")
+        btn_layout.addWidget(self.edit_ai_default)
+        
+        save_btn = QPushButton("💾 Save Provider Settings")
+        save_btn.setObjectName("primaryBtn")
+        save_btn.clicked.connect(self._save_ai_provider)
+        btn_layout.addWidget(save_btn)
+        btn_layout.addStretch()
+        
+        form_layout.addLayout(btn_layout)
+        layout.addWidget(form_group)
+        
+        self.ai_table.itemSelectionChanged.connect(self._on_ai_provider_selected)
         self._refresh_ai_table()
         self.stack.addWidget(page)
+
+    def _on_ai_provider_selected(self):
+        selected_ranges = self.ai_table.selectedRanges()
+        if not selected_ranges:
+            return
+        row = selected_ranges[0].topRow()
+        provider_name = self.ai_table.item(row, 0).text()
+        
+        with self.db._get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("SELECT name, api_key, model, temperature, is_default FROM ai_providers WHERE name=?", (provider_name,))
+            res = cursor.fetchone()
+            if res:
+                name, api_key, model, temp, is_default = res
+                self.edit_ai_name_lbl.setText(f"Editing Settings for: {name}")
+                self.edit_ai_key.setText(api_key or "")
+                self.edit_ai_model.setText(model or "")
+                self.edit_ai_temp.setValue(temp or 0.7)
+                self.edit_ai_default.setChecked(bool(is_default))
+
+    def _save_ai_provider(self):
+        selected_ranges = self.ai_table.selectedRanges()
+        if not selected_ranges:
+            QMessageBox.warning(self, "Selection Required", "Please select an AI provider from the table first.")
+            return
+        row = selected_ranges[0].topRow()
+        provider_name = self.ai_table.item(row, 0).text()
+        
+        api_key = self.edit_ai_key.text().strip()
+        model = self.edit_ai_model.text().strip()
+        temp = self.edit_ai_temp.value()
+        is_default = 1 if self.edit_ai_default.isChecked() else 0
+        
+        with self.db._get_connection() as conn:
+            cursor = conn.cursor()
+            if is_default == 1:
+                cursor.execute("UPDATE ai_providers SET is_default=0")
+            cursor.execute('''
+                UPDATE ai_providers 
+                SET api_key=?, model=?, temperature=?, is_default=?
+                WHERE name=?
+            ''', (api_key, model, temp, is_default, provider_name))
+            conn.commit()
+            
+        self.append_log(f"[AI Config] ✓ Updated settings for {provider_name} (Model: {model}).")
+        self._refresh_ai_table()
+        QMessageBox.information(self, "Success", f"AI Provider '{provider_name}' settings saved successfully.")
 
     def _build_market_apis_page(self):
         page = QWidget()
@@ -325,16 +437,191 @@ class CryptoPublisherDesktop(QMainWindow):
         page = QWidget()
         layout = QVBoxLayout(page)
         layout.setContentsMargins(25, 25, 25, 25)
-        layout.addWidget(QLabel("👤 Blurt.blog Blockchain Accounts"))
-        self.acc_table = QTableWidget(1, 4)
+        layout.setSpacing(15)
+        
+        header = QLabel("👤 Blurt.blog Blockchain Accounts")
+        header.setStyleSheet("font-size: 18px; font-weight: bold; color: #FFFFFF;")
+        layout.addWidget(header)
+        
+        # Table of accounts
+        self.acc_table = QTableWidget(0, 4)
         self.acc_table.setHorizontalHeaderLabels(["Username", "Posting Key", "Status", "Default Community"])
         self.acc_table.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
-        self.acc_table.setItem(0, 0, QTableWidgetItem("cryptomaster"))
-        self.acc_table.setItem(0, 1, QTableWidgetItem("••••••••••••••••••••••••"))
-        self.acc_table.setItem(0, 2, QTableWidgetItem("Active"))
-        self.acc_table.setItem(0, 3, QTableWidgetItem("blurt-139531"))
         layout.addWidget(self.acc_table)
+        
+        # Edit/Add Account Form
+        form_group = QGroupBox("Add / Edit Blurt Account")
+        form_layout = QVBoxLayout(form_group)
+        
+        grid = QHBoxLayout()
+        
+        user_v = QVBoxLayout()
+        user_v.addWidget(QLabel("Username (without @):"))
+        self.acc_user_input = QLineEdit()
+        self.acc_user_input.setPlaceholderText("e.g. cryptomaster")
+        user_v.addWidget(self.acc_user_input)
+        grid.addLayout(user_v)
+        
+        key_v = QVBoxLayout()
+        key_v.addWidget(QLabel("Private Posting Key (5J... or 5K...):"))
+        self.acc_key_input = QLineEdit()
+        self.acc_key_input.setPlaceholderText("Enter private posting key...")
+        self.acc_key_input.setEchoMode(QLineEdit.Password)
+        key_v.addWidget(self.acc_key_input)
+        grid.addLayout(key_v)
+        
+        comm_v = QVBoxLayout()
+        comm_v.addWidget(QLabel("Default Community ID:"))
+        self.acc_comm_input = QComboBox()
+        for c in self.blurt.get_communities():
+            self.acc_comm_input.addItem(f"{c['name']} [{c['id']}]", c['id'])
+        comm_v.addWidget(self.acc_comm_input)
+        grid.addLayout(comm_v)
+        
+        form_layout.addLayout(grid)
+        
+        btn_layout = QHBoxLayout()
+        save_btn = QPushButton("💾 Save / Add Account")
+        save_btn.setObjectName("primaryBtn")
+        save_btn.clicked.connect(self._save_blurt_account)
+        
+        set_active_btn = QPushButton("⭐️ Set Selected as Active")
+        set_active_btn.clicked.connect(self._set_account_active)
+        
+        delete_btn = QPushButton("🗑️ Delete Account")
+        delete_btn.setStyleSheet("color: #EF4444; border-color: #EF4444;")
+        delete_btn.clicked.connect(self._delete_blurt_account)
+        
+        btn_layout.addWidget(save_btn)
+        btn_layout.addWidget(set_active_btn)
+        btn_layout.addWidget(delete_btn)
+        btn_layout.addStretch()
+        form_layout.addLayout(btn_layout)
+        
+        layout.addWidget(form_group)
+        
+        self.acc_table.itemSelectionChanged.connect(self._on_account_selected)
+        self._refresh_accounts_table()
         self.stack.addWidget(page)
+
+    def _refresh_accounts_table(self):
+        with self.db._get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("SELECT username, posting_key, is_active, default_community FROM blurt_accounts")
+            rows = cursor.fetchall()
+            
+            if not rows:
+                cursor.execute('''
+                    INSERT INTO blurt_accounts (username, posting_key, is_active, default_community)
+                    VALUES (?, ?, ?, ?)
+                ''', ("cryptomaster", "5K_DEMO_POSTING_KEY_XYZ", 1, "blurt-139531"))
+                conn.commit()
+                cursor.execute("SELECT username, posting_key, is_active, default_community FROM blurt_accounts")
+                rows = cursor.fetchall()
+
+            self.acc_table.setRowCount(len(rows))
+            for r_idx, row in enumerate(rows):
+                self.acc_table.setItem(r_idx, 0, QTableWidgetItem(row[0]))
+                self.acc_table.setItem(r_idx, 1, QTableWidgetItem("••••••••" if row[1] else "Not Set"))
+                self.acc_table.setItem(r_idx, 2, QTableWidgetItem("Active / Selected" if row[2] else "Inactive"))
+                self.acc_table.setItem(r_idx, 3, QTableWidgetItem(row[3]))
+
+    def _on_account_selected(self):
+        selected_ranges = self.acc_table.selectedRanges()
+        if not selected_ranges:
+            return
+        row = selected_ranges[0].topRow()
+        username = self.acc_table.item(row, 0).text()
+        
+        with self.db._get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("SELECT username, posting_key, default_community FROM blurt_accounts WHERE username=?", (username,))
+            res = cursor.fetchone()
+            if res:
+                uname, key, comm = res
+                self.acc_user_input.setText(uname)
+                self.acc_key_input.setText(key)
+                idx = self.acc_comm_input.findData(comm)
+                if idx >= 0:
+                    self.acc_comm_input.setCurrentIndex(idx)
+
+    def _save_blurt_account(self):
+        username = self.acc_user_input.text().strip()
+        posting_key = self.acc_key_input.text().strip()
+        community = self.acc_comm_input.currentData()
+        
+        if not username or not posting_key:
+            QMessageBox.warning(self, "Validation Error", "Please provide both Username and Posting Key.")
+            return
+            
+        with self.db._get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("SELECT id FROM blurt_accounts WHERE username=?", (username,))
+            res = cursor.fetchone()
+            if res:
+                cursor.execute('''
+                    UPDATE blurt_accounts 
+                    SET posting_key=?, default_community=?
+                    WHERE username=?
+                ''', (posting_key, community, username))
+            else:
+                cursor.execute("SELECT count(*) FROM blurt_accounts")
+                count = cursor.fetchone()[0]
+                is_active = 1 if count == 0 else 0
+                cursor.execute('''
+                    INSERT INTO blurt_accounts (username, posting_key, is_active, default_community)
+                    VALUES (?, ?, ?, ?)
+                ''', (username, posting_key, is_active, community))
+            conn.commit()
+            
+        self.append_log(f"[Account] ✓ Saved account @{username} with default community {community}.")
+        self._refresh_accounts_table()
+        QMessageBox.information(self, "Success", f"Account '@{username}' saved successfully.")
+
+    def _set_account_active(self):
+        selected_ranges = self.acc_table.selectedRanges()
+        if not selected_ranges:
+            QMessageBox.warning(self, "Selection Required", "Please select an account from the table first.")
+            return
+        row = selected_ranges[0].topRow()
+        username = self.acc_table.item(row, 0).text()
+        
+        with self.db._get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("UPDATE blurt_accounts SET is_active=0")
+            cursor.execute("UPDATE blurt_accounts SET is_active=1 WHERE username=?", (username,))
+            conn.commit()
+            
+        self.append_log(f"[Account] ✓ Active publishing account changed to @{username}.")
+        self._refresh_accounts_table()
+        QMessageBox.information(self, "Success", f"Account '@{username}' is now set as Active.")
+
+    def _delete_blurt_account(self):
+        selected_ranges = self.acc_table.selectedRanges()
+        if not selected_ranges:
+            QMessageBox.warning(self, "Selection Required", "Please select an account from the table first.")
+            return
+        row = selected_ranges[0].topRow()
+        username = self.acc_table.item(row, 0).text()
+        
+        if username == "cryptomaster":
+            QMessageBox.warning(self, "Protected Account", "The demo account 'cryptomaster' cannot be deleted.")
+            return
+            
+        confirm = QMessageBox.question(self, "Confirm Delete", f"Are you sure you want to delete account '@{username}'?", QMessageBox.Yes | QMessageBox.No)
+        if confirm == QMessageBox.Yes:
+            with self.db._get_connection() as conn:
+                cursor = conn.cursor()
+                cursor.execute("DELETE FROM blurt_accounts WHERE username=?", (username,))
+                cursor.execute("SELECT count(*) FROM blurt_accounts WHERE is_active=1")
+                has_active = cursor.fetchone()[0]
+                if has_active == 0:
+                    cursor.execute("UPDATE blurt_accounts SET is_active=1 LIMIT 1")
+                conn.commit()
+                
+            self.append_log(f"[Account] Deleted account @{username}.")
+            self._refresh_accounts_table()
+            QMessageBox.information(self, "Deleted", f"Account '@{username}' has been deleted.")
 
     def _build_communities_page(self):
         page = QWidget()
@@ -376,21 +663,57 @@ class CryptoPublisherDesktop(QMainWindow):
         page = QWidget()
         layout = QVBoxLayout(page)
         layout.setContentsMargins(25, 25, 25, 25)
-        layout.addWidget(QLabel("🎯 Prompt Manager (Customize AI Tone & Article Structure)"))
+        layout.setSpacing(10)
+        
+        header = QLabel("🎯 Prompt Manager (Customize AI Tone & Article Structure)")
+        header.setStyleSheet("font-size: 18px; font-weight: bold; color: #FFFFFF;")
+        layout.addWidget(header)
+        
         self.sys_prompt_edit = QTextEdit()
-        self.sys_prompt_edit.setPlainText("You are an elite cryptocurrency financial analyst and journalist writing for Blurt.blog.")
-        layout.addWidget(QLabel("System Prompt:"))
+        layout.addWidget(QLabel("System Instruction Prompt:"))
         layout.addWidget(self.sys_prompt_edit)
-        layout.addWidget(QLabel("Article Template:"))
+        
         self.art_prompt_edit = QTextEdit()
-        self.art_prompt_edit.setPlainText("Crypto Market Update – {date}\n\nIntroduction\n\nBitcoin section\n{btc_chart}\n\nEthereum section\n{eth_chart}\n\nSolana section\n{sol_chart}\n\nDogecoin section\n{doge_chart}\n\nFinal market summary")
+        layout.addWidget(QLabel("Article Template (Markdown structure):"))
         layout.addWidget(self.art_prompt_edit)
+        
+        save_btn = QPushButton("💾 Save Prompts & Template")
+        save_btn.setObjectName("primaryBtn")
+        save_btn.clicked.connect(self._save_prompts_to_db)
+        layout.addWidget(save_btn)
+        
+        self._load_prompts_from_db()
         self.stack.addWidget(page)
+
+    def _load_prompts_from_db(self):
+        with self.db._get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("SELECT system_prompt, article_prompt FROM prompt_profiles WHERE name=?", ('Standard Professional Profile',))
+            row = cursor.fetchone()
+            if row:
+                self.sys_prompt_edit.setPlainText(row[0] or "")
+                self.art_prompt_edit.setPlainText(row[1] or "")
+
+    def _save_prompts_to_db(self):
+        sys_p = self.sys_prompt_edit.toPlainText().strip()
+        art_p = self.art_prompt_edit.toPlainText().strip()
+        
+        with self.db._get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute('''
+                UPDATE prompt_profiles 
+                SET system_prompt=?, article_prompt=?
+                WHERE name=?
+            ''', (sys_p, art_p, 'Standard Professional Profile'))
+            conn.commit()
+            
+        self.append_log("[Config] ✓ Prompt profiles and article templates updated in database.")
+        QMessageBox.information(self, "Success", "Prompt profiles saved successfully!")
 
     def _refresh_ai_table(self):
         with self.db._get_connection() as conn:
             cursor = conn.cursor()
-            cursor.execute("SELECT name, api_key, model, temperature, is_enabled FROM ai_providers")
+            cursor.execute("SELECT name, api_key, model, temperature, is_default FROM ai_providers")
             rows = cursor.fetchall()
             self.ai_table.setRowCount(len(rows))
             for r_idx, row in enumerate(rows):
@@ -398,7 +721,7 @@ class CryptoPublisherDesktop(QMainWindow):
                 self.ai_table.setItem(r_idx, 1, QTableWidgetItem("••••••••" if row[1] else "Not Set"))
                 self.ai_table.setItem(r_idx, 2, QTableWidgetItem(row[2]))
                 self.ai_table.setItem(r_idx, 3, QTableWidgetItem(str(row[3])))
-                self.ai_table.setItem(r_idx, 4, QTableWidgetItem("Active" if row[4] else "Disabled"))
+                self.ai_table.setItem(r_idx, 4, QTableWidgetItem("Default / Active" if row[4] else "Available"))
 
     def _update_word_count(self):
         txt = self.editor_body.toPlainText()

@@ -29,6 +29,11 @@ class AutomationScheduler:
         if self.log_callback:
             self.log_callback(f"[{datetime.now().strftime('%H:%M:%S')}] Scheduler paused.")
 
+    def reset_timer(self):
+        self.next_publish_time = datetime.now() + timedelta(seconds=self.interval_seconds)
+        if self.log_callback:
+            self.log_callback(f"[{datetime.now().strftime('%H:%M:%S')}] Scheduler countdown timer reset to 12 hours.")
+
     def get_countdown_str(self):
         if not self.is_running:
             return "PAUSED"
