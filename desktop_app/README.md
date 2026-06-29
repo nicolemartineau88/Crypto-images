@@ -35,3 +35,23 @@ python main.py
 - `ai_engine.py`: Multi-Provider AI Generator (Gemini, OpenAI, Grok)
 - `blurt_publisher.py`: Blockchain RPC & Markdown Post Assembler
 - `scheduler.py`: Background Thread Scheduler & Countdown Timer
+
+## Compiling the Executable (PyInstaller)
+
+To package the application into a standalone executable (e.g., a `.exe` on Windows), use PyInstaller. Since the blockchain library (`beem`) and its underlying cryptography library (`secp256k1`) utilize native C-bindings, standard packaging might miss the compiled dynamic library files (`.dll`), resulting in unhandled exceptions like:
+`Failed to load dynlib/dll` / `FileNotFoundError: Could not find module`.
+
+To bundle everything correctly, run the following commands in your terminal:
+
+1. Install PyInstaller in your virtual environment:
+```bash
+pip install pyinstaller
+```
+
+2. Package the application by explicitly collecting all dependencies and binaries:
+```bash
+pyinstaller --name "CryptoPublisherPro" --noconsole --collect-all "beem" --collect-all "secp256k1" main.py
+```
+
+3. The compiled standalone folder will be available inside the `dist/CryptoPublisherPro` directory. Open and run `CryptoPublisherPro.exe` inside it.
+
