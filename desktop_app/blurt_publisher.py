@@ -6,6 +6,13 @@ Uses beem (Steem/Hive/Blurt python library) or direct RPC endpoints.
 import time
 from datetime import datetime
 
+try:
+    from beem import Blurt
+    from beem.comment import Comment
+    BEEM_SUPPORT = True
+except ImportError:
+    BEEM_SUPPORT = False
+
 class BlurtBlogPublisher:
     def __init__(self, db_manager):
         self.db = db_manager

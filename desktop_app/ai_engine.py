@@ -7,6 +7,12 @@ import os
 import json
 from datetime import datetime
 
+try:
+    from google import genai
+    GEMINI_SUPPORT = True
+except ImportError:
+    GEMINI_SUPPORT = False
+
 class AIGeneratorEngine:
     def __init__(self, db_manager):
         self.db = db_manager

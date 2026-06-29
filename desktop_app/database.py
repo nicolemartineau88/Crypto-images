@@ -4,9 +4,16 @@ Stores Blurt accounts, AI provider keys, Prompt templates, Publish history, and 
 """
 import sqlite3
 import os
+import sys
 from datetime import datetime
 
-DB_PATH = "crypto_publisher.db"
+# Resolve database path dynamically to support PyInstaller and portable mode
+if getattr(sys, 'frozen', False):
+    BASE_DIR = os.path.dirname(sys.executable)
+else:
+    BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+
+DB_PATH = os.path.join(BASE_DIR, "crypto_publisher.db")
 
 class DatabaseManager:
     def __init__(self, db_path=DB_PATH):
