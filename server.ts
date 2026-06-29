@@ -219,7 +219,9 @@ async function startServer() {
     createdDate: string;
   }
 
-  const CONFIG_FILE = path.join(process.cwd(), "supabase_config.json");
+  const CONFIG_FILE = process.env.ELECTRON_USER_DATA
+    ? path.join(process.env.ELECTRON_USER_DATA, "supabase_config.json")
+    : path.join(process.cwd(), "supabase_config.json");
 
   function loadSupabaseConfig(): SupabaseAccount[] {
     try {
