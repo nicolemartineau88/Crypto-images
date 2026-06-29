@@ -1,4 +1,5 @@
-import puppeteer from "puppeteer";
+import puppeteer from "puppeteer-core";
+import { getChromeExecutablePath } from "./utils/browser-path";
 
 // Simple memory cache for screenshots
 const screenshotCache: Record<string, { buffer: Buffer; timestamp: number }> = {};
@@ -14,9 +15,13 @@ export async function getTradingViewScreenshot(symbol: string): Promise<Buffer |
 
   console.log(`[Puppeteer] Launching headless browser to capture chart for ${sym}...`);
   
+  const executablePath = getChromeExecutablePath();
+  console.log(`[Puppeteer] Using executable path: ${executablePath || "default"}`);
+
   // Puppeteer launch with standard sandbox disabling flags to run reliably in containers
   const browser = await puppeteer.launch({
     headless: true,
+    executablePath: executablePath || undefined,
     args: [
       "--no-sandbox",
       "--disable-setuid-sandbox",

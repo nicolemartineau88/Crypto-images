@@ -6,7 +6,8 @@ import blurt from "@blurtfoundation/blurtjs";
 import crypto from "crypto";
 import fs from "fs";
 import { createClient } from "@supabase/supabase-js";
-import puppeteer from "puppeteer";
+import puppeteer from "puppeteer-core";
+import { getChromeExecutablePath } from "./src/utils/browser-path";
 
 async function startServer() {
   const app = express();
@@ -580,8 +581,10 @@ async function startServer() {
   }
 
   async function renderSvgToPng(svgContent: string): Promise<Buffer> {
+    const executablePath = getChromeExecutablePath();
     const browser = await puppeteer.launch({
       headless: true,
+      executablePath: executablePath || undefined,
       args: [
         "--no-sandbox",
         "--disable-setuid-sandbox",
@@ -3568,7 +3571,7 @@ ${writingRules || ""}
     });
     app.use(vite.middlewares);
   } else {
-    const distPath = path.join(process.cwd(), "dist");
+    const distPath = process.env.ELECTRON_USER_DATA ? __dirname : path.join(process.cwd(), "dist");
     app.use(express.static(distPath));
     app.get("*", (req, res) => {
       res.sendFile(path.join(distPath, "index.html"));
