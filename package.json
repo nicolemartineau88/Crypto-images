@@ -51,7 +51,7 @@
       "output": "dist-electron"
     },
     "win": {
-      "icon": "icon.png",
+      "icon": "icon.ico",
       "target": [
         {
           "target": "nsis",
@@ -67,8 +67,8 @@
       "createDesktopShortcut": true,
       "createStartMenuShortcut": true,
       "shortcutName": "Crypto Publisher",
-      "installerIcon": "icon.png",
-      "uninstallerIcon": "icon.png",
+      "installerIcon": "icon.ico",
+      "uninstallerIcon": "icon.ico",
       "uninstallDisplayName": "Crypto Publisher",
       "artifactName": "Crypto Publisher Setup.${ext}"
     },
@@ -76,7 +76,9 @@
       "dist/**/*",
       "electron/**/*",
       "package.json",
-      "assets/**/*"
+      "assets/**/*",
+      "icon.png",
+      "icon.ico"
     ],
     "asar": false
   }
